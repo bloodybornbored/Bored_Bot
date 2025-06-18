@@ -28,29 +28,29 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🤖 *Команды бота:*
 
 📋 *Заметки и задачи*
-/add [текст] — добавить задачу
-/training gym [текст] — тренировка в зале
-/training home [текст] — домашняя тренировка
-/report — краткий отчёт
+/add [текст] — добавить задачу  
+/training gym [текст] — тренировка в зале  
+/training home [текст] — домашняя тренировка  
+/report — краткий отчёт  
 /pdf — выгрузка в PDF
 
 📚 *Книги*
-/booknote [название] [заметка] — заметка по книге
-/addbook [название] — добавить в библиотеку
-/books — список прочитанных книг
+/booknote [название] [заметка] — заметка по книге  
+/addbook [название] — добавить в библиотеку  
+/books — список прочитанных книг  
 /bookpdf [название] — PDF по заметкам книги
 
-🎥 *Фильмы и игры*
-/filmlog [текст] — заметка по фильму
+🎬 *Фильмы и игры*
+/filmlog [текст] — заметка по фильму  
 /gamelog [текст] — заметка по игре
 
 💊 *Добавки и напоминания*
-/supplement [текст] — приём добавки
-/remind [время] [текст] — напоминание (пример: /remind 15:00 массаж)
+/supplement [текст] — приём добавки  
+/remind [время] [текст] — напоминание (пример: /remind 15:00 массаж)  
 /dailylog — активные напоминания
 
 🧠 *Другое*
-/mindmap — интеллект-карта (PDF)
+/mindmap — интеллект-карта (PDF)  
 /help — список команд
 """
     await update.message.reply_markdown(text)
@@ -73,22 +73,20 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 await update.message.reply_text("❌ Не удалось распознать голосовое сообщение.")
 
-# Подключение хендлеров
+# Хендлеры
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
-# Webhook
+# Webhook маршрут
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.update_queue.put_nowait(update)
     return "ok", 200
 
-@app.before_first_request
-def init_webhook():
+# Запуск
+if __name__ == "__main__":
     application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
     print("🔗 Webhook установлен")
-
-if __name__ == "__main__":
     app.run(port=int(os.environ.get("PORT", 10000)), host="0.0.0.0")
