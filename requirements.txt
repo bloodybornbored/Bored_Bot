@@ -1,8 +1,6 @@
-Flask
-python-telegram-bot==20.3
-fpdf
-pydub
-speechrecognition
-graphviz
-openai-whisper
+flask
+python-telegram-bot==20.7
+whisper @ git+https://github.com/openai/whisper.git
 ffmpeg-python
+graphviz
+PyPDF2
