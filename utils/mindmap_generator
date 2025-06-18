@@ -1,52 +1,29 @@
-from graphviz import Digraph
 import json
+from graphviz import Digraph
 
 def generate_mindmap():
-    dot = Digraph(comment="Mind Map")
-    dot.attr(dpi='300')
-    dot.node("root", "🧠 Мой Mind Map", shape="box")
+    try:
+        with open("db.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except:
+        data = []
 
-    with open("db.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    categories = {
-        "training": {"Home": [], "GYM": []},
-        "reading": [],
-        "films": [],
-        "games": [],
-        "supplements": [],
-        "task": []
-    }
-
+    categories = {}
     for entry in data:
-        t = entry["type"]
-        content = entry["content"]
-        if t == "training":
-            if "home" in content.lower():
-                categories["training"]["Home"].append(content)
-            else:
-                categories["training"]["GYM"].append(content)
-        elif t in categories:
-            categories[t].append(content)
+        cat = entry["type"].capitalize()
+        categories.setdefault(cat, []).append(entry["content"])
 
-    for category, items in categories.items():
-        dot.node(category, category.capitalize(), shape="ellipse")
-        dot.edge("root", category)
+    dot = Digraph(comment="Mind Map")
+    dot.attr(rankdir='LR')
+    dot.node("MindMap", "📘 My Tracker")
 
-        if isinstance(items, dict):
-            for sub, notes in items.items():
-                sub_id = f"{category}_{sub}"
-                dot.node(sub_id, sub, shape="box")
-                dot.edge(category, sub_id)
-                for i, note in enumerate(notes):
-                    nid = f"{sub_id}_{i}"
-                    dot.node(nid, note[:30], shape="note")
-                    dot.edge(sub_id, nid)
-        else:
-            for i, note in enumerate(items):
-                nid = f"{category}_{i}"
-                dot.node(nid, note[:30], shape="note")
-                dot.edge(category, nid)
+    for cat, items in categories.items():
+        dot.node(cat, cat)
+        dot.edge("MindMap", cat)
+        for i, item in enumerate(items):
+            node_id = f"{cat}_{i}"
+            dot.node(node_id, item[:40])  # обрезаем длинные строки
+            dot.edge(cat, node_id)
 
     output_path = "mindmap.pdf"
     dot.render("mindmap", format="pdf", cleanup=True)
