@@ -14,6 +14,9 @@ from pydub import AudioSegment
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
+print(f"🚀 TOKEN: {TOKEN}")
+print(f"🌐 WEBHOOK_URL: {WEBHOOK_URL}")
+
 
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
