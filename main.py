@@ -6,6 +6,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from utils.pdf_generator import generate_pdf
 from utils.logger import log_event
 import datetime
+import graphviz
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
@@ -67,6 +68,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /supplements [текст] — добавки
 /books [название] - [заметка] — заметка по книге
 /library — список книг из библиотеки
+/bookmap — mind map по библиотеке
+/deletebook [название] — удалить книгу по названию
 /remind [время в формате HH:MM] [сообщение] — напоминание
 /report — текстовый отчёт
 /pdf — PDF с отчётом
@@ -112,6 +115,46 @@ async def library(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "\n\n".join([f"{title}\n{notes}\n[{ts}]" for title, notes, ts in books])
     await update.message.reply_text("📚 Библиотека:\n" + text)
 
+async def deletebook(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    title = ' '.join(context.args).strip()
+    if not title:
+        await update.message.reply_text("Формат: /deletebook Название")
+        return
+    conn = sqlite3.connect("tracker.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM books WHERE title = ?", (title,))
+    deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    if deleted:
+        await update.message.reply_text(f"Удалена книга: {title}")
+    else:
+        await update.message.reply_text(f"Книга не найдена: {title}")
+
+async def bookmap(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = sqlite3.connect("tracker.db")
+    c = conn.cursor()
+    c.execute("SELECT title, notes FROM books")
+    books = c.fetchall()
+    conn.close()
+    if not books:
+        await update.message.reply_text("Нет книг для отображения в карте.")
+        return
+    dot = graphviz.Digraph(format='pdf')
+    dot.attr(rankdir='LR')
+    dot.node("Библиотека", shape="box")
+    for i, (title, notes) in enumerate(books):
+        node_id = f"book_{i}"
+        dot.node(node_id, f"{title}", shape="ellipse")
+        dot.edge("Библиотека", node_id)
+        if notes:
+            dot.node(f"note_{i}", notes[:80] + ("..." if len(notes) > 80 else ""), shape="note")
+            dot.edge(node_id, f"note_{i}")
+    file_path = "/tmp/bookmap.pdf"
+    dot.render(filename="/tmp/bookmap", cleanup=True)
+    with open(file_path, "rb") as f:
+        await update.message.reply_document(InputFile(f, filename="bookmap.pdf"))
+
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         time_str = context.args[0]
@@ -151,6 +194,8 @@ application.add_handler(CommandHandler("reading", reading))
 application.add_handler(CommandHandler("supplements", supplements))
 application.add_handler(CommandHandler("books", books))
 application.add_handler(CommandHandler("library", library))
+application.add_handler(CommandHandler("deletebook", deletebook))
+application.add_handler(CommandHandler("bookmap", bookmap))
 application.add_handler(CommandHandler("remind", remind))
 application.add_handler(CommandHandler("report", report))
 application.add_handler(CommandHandler("pdf", pdf))
