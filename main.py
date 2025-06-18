@@ -3,9 +3,11 @@ import json
 import asyncio
 from flask import Flask, request
 from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.constants import ChatAction
 from utils.logger import log_event
 from utils.pdf_generator import generate_pdf
+# from utils.voice_handler import convert_ogg_to_text  # раскомментируешь после добавления voice
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
@@ -68,7 +70,7 @@ async def pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(file_path, "rb") as f:
         await update.message.reply_document(InputFile(f, filename="report.pdf"))
 
-# Регистрируем обработчики
+# Обработчики
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("add", add))
 application.add_handler(CommandHandler("training", training))
@@ -77,6 +79,8 @@ application.add_handler(CommandHandler("supplements", supplements))
 application.add_handler(CommandHandler("report", report))
 application.add_handler(CommandHandler("pdf", pdf))
 
-# Запуск Flask-сервера
+# Позже подключим голосовые
+# application.add_handler(MessageHandler(filters.VOICE, voice_message_handler))
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
