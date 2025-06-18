@@ -1,103 +1,94 @@
 import os
-import logging
-import asyncio
+import json
+import tempfile
 from flask import Flask, request
 from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 from utils.logger import log_event
 from utils.pdf_generator import generate_pdf
+import speech_recognition as sr
+from pydub import AudioSegment
 
 TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-
 application = Application.builder().token(TOKEN).build()
 
+# /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привет! Я бот-трекер. Команды: /help")
+
+# /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = """
+🤖 *Команды бота:*
+
+📋 *Заметки и задачи*
+/add [текст] — добавить задачу
+/training gym [текст] — тренировка в зале
+/training home [текст] — домашняя тренировка
+/report — краткий отчёт
+/pdf — выгрузка в PDF
+
+📚 *Книги*
+/booknote [название] [заметка] — заметка по книге
+/addbook [название] — добавить в библиотеку
+/books — список прочитанных книг
+/bookpdf [название] — PDF по заметкам книги
+
+🎥 *Фильмы и игры*
+/filmlog [текст] — заметка по фильму
+/gamelog [текст] — заметка по игре
+
+💊 *Добавки и напоминания*
+/supplement [текст] — приём добавки
+/remind [время] [текст] — напоминание (пример: /remind 15:00 массаж)
+/dailylog — активные напоминания
+
+🧠 *Другое*
+/mindmap — интеллект-карта (PDF)
+/help — список команд
+"""
+    await update.message.reply_markdown(text)
+
+# Обработка голосовых сообщений
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await context.bot.get_file(update.message.voice.file_id)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".oga") as temp_oga:
+        await file.download_to_drive(temp_oga.name)
+        temp_wav = temp_oga.name.replace(".oga", ".wav")
+        AudioSegment.from_ogg(temp_oga.name).export(temp_wav, format="wav")
+
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(temp_wav) as source:
+            audio = recognizer.record(source)
+            try:
+                text = recognizer.recognize_google(audio, language="ru-RU")
+                log_event("voice", text)
+                await update.message.reply_text(f"🔊 Распознано: {text}")
+            except:
+                await update.message.reply_text("❌ Не удалось распознать голосовое сообщение.")
+
+# Подключение хендлеров
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("help", help_command))
+application.add_handler(MessageHandler(filters.VOICE, handle_voice))
+
+# Webhook
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run_coroutine_threadsafe(
-        application.update_queue.put(update),
-        application._loop
-    )
-    return "ok"
+    application.update_queue.put_nowait(update)
+    return "ok", 200
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running!"
-
-# === Команды ===
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я бот. Команды: /add /training /reading /supplements /report /pdf")
-
-async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    entry = ' '.join(context.args)
-    log_event("task", entry)
-    await update.message.reply_text(f"Задача добавлена: {entry}")
-
-async def training(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    entry = ' '.join(context.args)
-    log_event("training", entry)
-    await update.message.reply_text(f"Тренировка записана: {entry}")
-
-async def reading(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    entry = ' '.join(context.args)
-    log_event("reading", entry)
-    await update.message.reply_text(f"Чтение записано: {entry}")
-
-async def supplements(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    entry = ' '.join(context.args)
-    log_event("supplements", entry)
-    await update.message.reply_text(f"Добавки записаны: {entry}")
-
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    import json
-    try:
-        with open("db.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not data:
-            raise ValueError
-    except:
-        await update.message.reply_text("Нет записей.")
-        return
-    text = "\n".join([f"{entry['type'].capitalize()}: {entry['content']}" for entry in data])
-    await update.message.reply_text("📝 Отчёт:\n" + text)
-
-async def pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file_path = generate_pdf()
-    with open(file_path, "rb") as f:
-        await update.message.reply_document(InputFile(f, filename="report.pdf"))
-
-# === Регистрируем команды ===
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("add", add))
-application.add_handler(CommandHandler("training", training))
-application.add_handler(CommandHandler("reading", reading))
-application.add_handler(CommandHandler("supplements", supplements))
-application.add_handler(CommandHandler("report", report))
-application.add_handler(CommandHandler("pdf", pdf))
-
-# === Установка Webhook ===
-async def set_webhook():
-    try:
-        await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
-        print(f"✅ Webhook установлен: {WEBHOOK_URL}/{TOKEN}")
-    except Exception as e:
-        print("❌ Ошибка установки webhook:", e)
-
-async def main():
-    await application.initialize()
-    await set_webhook()
-    await application.start()
-    await application.updater.start_polling()  # нужно, чтобы обрабатывать update_queue
-    await application.updater.wait_for_stop()
+@app.before_first_request
+def init_webhook():
+    application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+    print("🔗 Webhook установлен")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-        app.run(host="0.0.0.0", port=10000)
-    except Exception as e:
-        print("❌ Ошибка запуска:", e)
+    app.run(port=int(os.environ.get("PORT", 10000)), host="0.0.0.0")
