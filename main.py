@@ -21,7 +21,7 @@ application = Application.builder().token(TOKEN).build()
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
+    asyncio.create_task(application.update_queue.put(update))
     return "ok"
 
 # Команды
