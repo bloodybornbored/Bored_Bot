@@ -1,0 +1,53 @@
+from graphviz import Digraph
+import json
+
+def generate_mindmap():
+    dot = Digraph(comment="Mind Map")
+    dot.attr(dpi='300')
+    dot.node("root", "🧠 Мой Mind Map", shape="box")
+
+    with open("db.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    categories = {
+        "training": {"Home": [], "GYM": []},
+        "reading": [],
+        "films": [],
+        "games": [],
+        "supplements": [],
+        "task": []
+    }
+
+    for entry in data:
+        t = entry["type"]
+        content = entry["content"]
+        if t == "training":
+            if "home" in content.lower():
+                categories["training"]["Home"].append(content)
+            else:
+                categories["training"]["GYM"].append(content)
+        elif t in categories:
+            categories[t].append(content)
+
+    for category, items in categories.items():
+        dot.node(category, category.capitalize(), shape="ellipse")
+        dot.edge("root", category)
+
+        if isinstance(items, dict):
+            for sub, notes in items.items():
+                sub_id = f"{category}_{sub}"
+                dot.node(sub_id, sub, shape="box")
+                dot.edge(category, sub_id)
+                for i, note in enumerate(notes):
+                    nid = f"{sub_id}_{i}"
+                    dot.node(nid, note[:30], shape="note")
+                    dot.edge(sub_id, nid)
+        else:
+            for i, note in enumerate(items):
+                nid = f"{category}_{i}"
+                dot.node(nid, note[:30], shape="note")
+                dot.edge(category, nid)
+
+    output_path = "mindmap.pdf"
+    dot.render("mindmap", format="pdf", cleanup=True)
+    return output_path
