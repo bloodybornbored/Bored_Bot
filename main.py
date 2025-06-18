@@ -12,10 +12,13 @@ WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
-@app.before_first_request
-def set_webhook():
-    if WEBHOOK_URL:
-        application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+@app.before_request
+def set_webhook_once():
+    if not hasattr(app, 'webhook_set'):
+        if WEBHOOK_URL:
+            application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+        app.webhook_set = True
+
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
