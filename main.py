@@ -3,24 +3,25 @@ import json
 import asyncio
 from flask import Flask, request
 from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-from telegram.constants import ChatAction
+from telegram.ext import Application, CommandHandler, ContextTypes
 from utils.logger import log_event
 from utils.pdf_generator import generate_pdf
-# from utils.voice_handler import convert_ogg_to_text  # позже подключим голос
 
 # Переменные окружения
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
 
-# Flask и Telegram
+# Flask-приложение
 app = Flask(__name__)
+
+# Telegram Application
 application = Application.builder().token(TOKEN).build()
 
-# Webhook-обработчик
+# Обработчик Webhook'а
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
+    # Ключевой фикс — создаём async-задачу
     asyncio.create_task(application.update_queue.put(update))
     return "ok"
 
@@ -57,15 +58,15 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("Нет записей.")
         return
-    text = "\\n".join([f"{entry['type'].capitalize()}: {entry['content']}" for entry in data])
-    await update.message.reply_text("📝 Отчёт:\\n" + text)
+    text = "\n".join([f"{entry['type'].capitalize()}: {entry['content']}" for entry in data])
+    await update.message.reply_text("📝 Отчёт:\n" + text)
 
 async def pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = generate_pdf()
     with open(file_path, "rb") as f:
         await update.message.reply_document(InputFile(f, filename="report.pdf"))
 
-# Подключение обработчиков
+# Регистрируем команды
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("add", add))
 application.add_handler(CommandHandler("training", training))
@@ -74,7 +75,7 @@ application.add_handler(CommandHandler("supplements", supplements))
 application.add_handler(CommandHandler("report", report))
 application.add_handler(CommandHandler("pdf", pdf))
 
-# Установка webhook и запуск приложения
+# Инициализация и установка Webhook
 async def main():
     await application.initialize()
     await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
