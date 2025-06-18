@@ -1,5 +1,5 @@
 import os
-import json
+import logging
 import asyncio
 from flask import Flask, request
 from telegram import Update, InputFile
@@ -7,30 +7,31 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from utils.logger import log_event
 from utils.pdf_generator import generate_pdf
 
-# Переменные окружения
 TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Flask-приложение
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
-# Telegram Application
 application = Application.builder().token(TOKEN).build()
 
-# Обработчик Webhook'а
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # 👇 безопасная отправка обновлений в очередь, даже из sync Flask
     asyncio.run_coroutine_threadsafe(
         application.update_queue.put(update),
         application._loop
     )
     return "ok"
 
-# Команды
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot is running!"
+
+# === Команды ===
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я бот в облаке. Команды: /add /training /reading /supplements /report /pdf")
+    await update.message.reply_text("Привет! Я бот. Команды: /add /training /reading /supplements /report /pdf")
 
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     entry = ' '.join(context.args)
@@ -53,6 +54,7 @@ async def supplements(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Добавки записаны: {entry}")
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    import json
     try:
         with open("db.json", "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -69,7 +71,7 @@ async def pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(file_path, "rb") as f:
         await update.message.reply_document(InputFile(f, filename="report.pdf"))
 
-# Регистрируем команды
+# === Регистрируем команды ===
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("add", add))
 application.add_handler(CommandHandler("training", training))
@@ -78,12 +80,24 @@ application.add_handler(CommandHandler("supplements", supplements))
 application.add_handler(CommandHandler("report", report))
 application.add_handler(CommandHandler("pdf", pdf))
 
-# Установка Webhook и запуск Flask
+# === Установка Webhook ===
+async def set_webhook():
+    try:
+        await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+        print(f"✅ Webhook установлен: {WEBHOOK_URL}/{TOKEN}")
+    except Exception as e:
+        print("❌ Ошибка установки webhook:", e)
+
 async def main():
     await application.initialize()
-    await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
-    print("✅ Webhook установлен:", f"{WEBHOOK_URL}/{TOKEN}")
+    await set_webhook()
+    await application.start()
+    await application.updater.start_polling()  # нужно, чтобы обрабатывать update_queue
+    await application.updater.wait_for_stop()
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    try:
+        asyncio.run(main())
+        app.run(host="0.0.0.0", port=10000)
+    except Exception as e:
+        print("❌ Ошибка запуска:", e)
