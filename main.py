@@ -21,8 +21,11 @@ application = Application.builder().token(TOKEN).build()
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Ключевой фикс — создаём async-задачу
-    asyncio.create_task(application.update_queue.put(update))
+    # 👇 безопасная отправка обновлений в очередь, даже из sync Flask
+    asyncio.run_coroutine_threadsafe(
+        application.update_queue.put(update),
+        application._loop
+    )
     return "ok"
 
 # Команды
@@ -75,7 +78,7 @@ application.add_handler(CommandHandler("supplements", supplements))
 application.add_handler(CommandHandler("report", report))
 application.add_handler(CommandHandler("pdf", pdf))
 
-# Инициализация и установка Webhook
+# Установка Webhook и запуск Flask
 async def main():
     await application.initialize()
     await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
