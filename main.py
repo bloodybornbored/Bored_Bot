@@ -1,7 +1,7 @@
 import os
 import json
 from flask import Flask, request
-from telegram import Update, InputFile
+from telegram import Update, InputFile, Audio
 from telegram.ext import (
     Application, CommandHandler, ContextTypes,
     MessageHandler, filters
@@ -9,6 +9,7 @@ from telegram.ext import (
 from utils.logger import log_event
 from utils.pdf_generator import generate_pdf
 from utils.mindmap_generator import generate_mindmap
+from utils.voice_transcriber import transcribe_voice
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
@@ -77,6 +78,15 @@ async def mindmap(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
 
+# Обработка голосовых сообщений
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    voice = update.message.voice
+    file = await context.bot.get_file(voice.file_id)
+    file_path = await file.download_to_drive()
+    text = transcribe_voice(file_path)
+    log_event("voice_note", text)
+    await update.message.reply_text(f"🗣️ Распознано: {text}")
+
 # Обработка текстовых сообщений
 async def fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Команда не распознана. Используй /help для списка команд.")
@@ -106,6 +116,7 @@ application.add_handler(CommandHandler("supplements", supplements))
 application.add_handler(CommandHandler("report", report))
 application.add_handler(CommandHandler("pdf", pdf))
 application.add_handler(CommandHandler("mindmap", mindmap))
+application.add_handler(MessageHandler(filters.VOICE, handle_voice))
 application.add_handler(MessageHandler(filters.TEXT, fallback))
 
 if __name__ == "__main__":
