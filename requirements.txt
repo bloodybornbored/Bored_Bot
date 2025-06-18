@@ -3,3 +3,4 @@ python-telegram-bot==20.7
 ffmpeg-python
 graphviz
 PyPDF2
+fpdf
